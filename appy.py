@@ -6,11 +6,13 @@ import cartopy.feature as cfeature
 import pandas as pd
 from datetime import datetime, timedelta
 
+# Konfigurasi halaman Streamlit
 st.set_page_config(page_title="Prakiraan Cuaca Krayan", layout="wide")
 st.title("📍 Prakiraan Cuaca Wilayah Krayan (GFS Realtime)")
+st.markdown("**Richard_14.24.0008_M8TB**")
 st.header("Web Hasil Pembelajaran Pengelolaan Informasi Meteorologi")
 
-# ===== Fungsi bantu ambil run time GFS terbaru =====
+# Fungsi bantu: Tentukan waktu GFS terbaru
 def get_latest_gfs_time():
     now = datetime.utcnow() - timedelta(hours=6)
     gfs_date = now.strftime('%Y%m%d')
@@ -24,36 +26,35 @@ def get_latest_gfs_time():
         gfs_hour = "18"
     return gfs_date, gfs_hour
 
-# ===== Fungsi untuk memuat dataset GFS dari NOAA =====
+# Fungsi memuat data dari server NOAA
 @st.cache_data
 def load_dataset(run_date, run_hour):
     base_url = f"https://nomads.ncep.noaa.gov/dods/gfs_0p25_1hr/gfs{run_date}/gfs_0p25_1hr_{run_hour}z"
-    ds = xr.open_dataset(base_url)
-    return ds
+    return xr.open_dataset(base_url)
 
 # Ambil waktu GFS otomatis
 run_date, run_hour = get_latest_gfs_time()
 st.sidebar.title("⚙️ Pengaturan")
 st.sidebar.info(f"📅 GFS otomatis: {run_date} jam {run_hour}Z")
 
-# Pilihan parameter
+# Input parameter dari pengguna
 forecast_hour = st.sidebar.slider("Jam ke depan (Forecast Hour)", 0, 240, 6, step=3)
-parameter = st.sidebar.selectbox("Parameter", [
+parameter = st.sidebar.selectbox("Parameter Cuaca", [
     "Curah Hujan per jam (pratesfc)",
     "Suhu Permukaan (tmp2m)",
     "Angin Permukaan (ugrd10m & vgrd10m)",
     "Tekanan Permukaan Laut (prmslmsl)"
 ])
 
-# Load data dari NOAA
+# Load data
 try:
     ds = load_dataset(run_date, run_hour)
-    st.success("✅ Dataset GFS berhasil dimuat dari server NOAA.")
+    st.success("✅ Dataset GFS berhasil dimuat.")
 except Exception as e:
-    st.error(f"❌ Gagal memuat data GFS: {e}")
+    st.error(f"❌ Gagal memuat data: {e}")
     st.stop()
 
-# Pemrosesan parameter
+# Interpretasi parameter
 is_contour = False
 is_vector = False
 
@@ -63,7 +64,7 @@ if "pratesfc" in parameter:
     cmap = "Blues"
 elif "tmp2m" in parameter:
     var = ds["tmp2m"][forecast_hour, :, :] - 273.15
-    label = "Suhu (°C)"
+    label = "Suhu Permukaan (°C)"
     cmap = "coolwarm"
 elif "ugrd10m" in parameter:
     u = ds["ugrd10m"][forecast_hour, :, :]
@@ -71,7 +72,7 @@ elif "ugrd10m" in parameter:
     speed = (u**2 + v**2)**0.5 * 1.94384
     var = speed
     label = "Kecepatan Angin (knot)"
-    cmap = plt.cm.get_cmap("RdYlGn_r", 10)
+    cmap = "YlGnBu"
     is_vector = True
 elif "prmsl" in parameter:
     var = ds["prmslmsl"][forecast_hour, :, :] / 100
@@ -82,41 +83,47 @@ else:
     st.warning("Parameter tidak dikenali.")
     st.stop()
 
-# === Filter Wilayah Fokus Krayan ===
-# Lintang: 2.0° hingga 4.5° LU, Bujur: 114.5° - 116.5° BT
-lat_min, lat_max = 2.0, 4.5
-lon_min, lon_max = 114.5, 116.5
+# Batas wilayah Krayan (approx.)
+lat_min, lat_max = 2.0, 4.5     # Lintang (LU)
+lon_min, lon_max = 114.5, 116.5  # Bujur (BT)
 
+# Potong area
 var = var.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
 if is_vector:
     u = u.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
     v = v.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
 
-# Visualisasi Peta Wilayah Krayan
+# Buat peta
 fig = plt.figure(figsize=(8, 6))
 ax = plt.axes(projection=ccrs.PlateCarree())
 ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
+# Valid time
 valid_time = ds.time[forecast_hour].values
 valid_dt = pd.to_datetime(str(valid_time))
 valid_str = valid_dt.strftime("%HUTC %a %d %b %Y")
 tstr = f"t+{forecast_hour:03d}"
 
+# Judul
 ax.set_title(f"{label}\nValid {valid_str}", loc="left", fontsize=10, fontweight="bold")
 ax.set_title(f"GFS {run_date} {run_hour}Z {tstr}", loc="right", fontsize=10, fontweight="bold")
 
+# Plot variabel
 if is_contour:
-    cs = ax.contour(var.lon, var.lat, var.values, levels=15, colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
+    cs = ax.contour(var.lon, var.lat, var.values, levels=15,
+                    colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
     ax.clabel(cs, fmt="%d", colors='black', fontsize=8)
 else:
-    im = ax.pcolormesh(var.lon, var.lat, var.values, cmap=cmap, transform=ccrs.PlateCarree())
+    # ✅ Gunakan xarray untuk menghindari error pcolormesh
+    im = var.plot.pcolormesh(ax=ax, cmap=cmap, transform=ccrs.PlateCarree(), add_colorbar=False)
     cbar = plt.colorbar(im, ax=ax, orientation='vertical', pad=0.02)
     cbar.set_label(label)
+
     if is_vector:
         ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# Tambahan geospasial
+# Fitur geospasial
 ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.BORDERS, linestyle=':')
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
