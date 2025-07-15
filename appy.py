@@ -11,7 +11,7 @@ import matplotlib.image as mpimg
 # === Konfigurasi halaman ===
 st.set_page_config(page_title="Prakiraan Cuaca Krayan", layout="wide")
 st.title("📍 Prakiraan Cuaca Wilayah Krayan (GFS Realtime)")
-st.markdown("**Richard_14.24.0008_M8TB**")  # Nama Anda
+st.markdown("**Richard_14.24.0008_M8TB**")
 
 # === Fungsi bantu ===
 def get_latest_gfs_time():
@@ -25,7 +25,7 @@ def load_dataset(run_date, run_hour):
     url = f"https://nomads.ncep.noaa.gov/dods/gfs_0p25_1hr/gfs{run_date}/gfs_0p25_1hr_{run_hour}z"
     return xr.open_dataset(url)
 
-# === Sidebar input ===
+# === Sidebar ===
 run_date, run_hour = get_latest_gfs_time()
 st.sidebar.title("⚙️ Pengaturan")
 st.sidebar.info(f"📅 GFS otomatis: {run_date} jam {run_hour}Z")
@@ -46,7 +46,7 @@ except Exception as e:
     st.error(f"❌ Gagal memuat data: {e}")
     st.stop()
 
-# === Pilihan parameter ===
+# === Parameter cuaca ===
 is_contour = False
 is_vector = False
 
@@ -77,52 +77,57 @@ else:
 # === Wilayah Krayan ===
 lat_min, lat_max = 2.0, 4.5
 lon_min, lon_max = 114.5, 116.5
-
-if var.lat.values[0] > var.lat.values[-1]:
-    lat_slice = slice(lat_max, lat_min)
-else:
-    lat_slice = slice(lat_min, lat_max)
-
+lat_slice = slice(lat_min, lat_max) if var.lat[0] < var.lat[-1] else slice(lat_max, lat_min)
 var = var.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 if is_vector:
     u = u.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
     v = v.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 
-if var.size == 0 or var.isnull().all():
-    st.error("⚠️ Data tidak tersedia untuk wilayah Krayan.")
-    st.stop()
-
-# === Waktu validasi ===
+# === Validasi waktu dan data ===
 valid_time = pd.to_datetime(str(ds.time[forecast_hour].values))
 valid_str = valid_time.strftime("%HUTC %a %d %b %Y")
 tstr = f"t+{forecast_hour:03d}"
+
+if var.size == 0 or var.isnull().all():
+    st.error("⚠️ Data tidak tersedia untuk wilayah Krayan.")
+    st.stop()
 
 # === Titik Bandara Yuvai Semaring ===
 bandara_lat = 3.683
 bandara_lon = 115.733
 
-# === Plot ===
-fig = plt.figure(figsize=(8, 6))
+# === Plot peta ===
+fig = plt.figure(figsize=(9, 6))
 ax = plt.axes(projection=ccrs.PlateCarree())
 ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
-# === Judul & validitas ===
-ax.set_title(f"{label}", loc="left", fontsize=12, fontweight="bold")
-ax.text(0.01, 1.05, f"Valid {valid_str}", transform=ax.transAxes, fontsize=10, va='top', ha='left')
-ax.text(0.99, 1.05, f"GFS {run_date} {run_hour}Z {tstr}", transform=ax.transAxes,
-        fontsize=10, va='top', ha='right')
+# Judul & informasi waktu
+ax.text(0.5, 1.08, f"{label}", transform=ax.transAxes, ha="center",
+        fontsize=12, fontweight="bold")
+ax.text(0.01, 1.03, f"Valid: {valid_str}", transform=ax.transAxes,
+        fontsize=10, ha="left", va="top")
+ax.text(0.99, 1.03, f"GFS {run_date} {run_hour}Z {tstr}", transform=ax.transAxes,
+        fontsize=10, ha="right", va="top")
 
-# === Logo BMKG ===
+# === Logo BMKG & STMKG di kiri atas ===
 try:
-    logo = mpimg.imread("/mnt/data/e0c9c208-e5fc-4a10-9ce5-da9d709cd86c.png")
-    imagebox = OffsetImage(logo, zoom=0.15)
-    ab = AnnotationBbox(imagebox, (0.08, 0.92), xycoords='axes fraction',
-                        frameon=False, box_alignment=(0, 1))
-    ax.add_artist(ab)
-except Exception as e:
-    st.warning(f"Gagal menambahkan logo BMKG: {e}")
+    logo_bmkg = mpimg.imread("/mnt/data/e0c9c208-e5fc-4a10-9ce5-da9d709cd86c.png")
+    logo_stmkg = mpimg.imread("/mnt/data/sekolah-kedinasan-stmkg-yang-memiliki-ikatan-dinas-dengan-bmkg.jpg")
 
-# === Plot data parameter ===
+    imagebox_bmkg = OffsetImage(logo_bmkg, zoom=0.12)
+    imagebox_stmkg = OffsetImage(logo_stmkg, zoom=0.10)
+
+    ab_bmkg = AnnotationBbox(imagebox_bmkg, (0.05, 1.06), xycoords='axes fraction',
+                             frameon=False, box_alignment=(0,1))
+    ab_stmkg = AnnotationBbox(imagebox_stmkg, (0.17, 1.06), xycoords='axes fraction',
+                              frameon=False, box_alignment=(0,1))
+
+    ax.add_artist(ab_bmkg)
+    ax.add_artist(ab_stmkg)
+except Exception as e:
+    st.warning(f"Gagal menambahkan logo: {e}")
+
+# === Plot parameter ===
 if is_contour:
     cs = ax.contour(var.lon, var.lat, var.values, levels=15,
                     colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
@@ -136,7 +141,7 @@ else:
         ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# === Fitur peta ===
+# === Fitur Peta ===
 ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
 ax.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='gray')
@@ -149,5 +154,5 @@ ax.plot(bandara_lon, bandara_lat, marker='o', color='red', markersize=6, transfo
 ax.text(bandara_lon + 0.03, bandara_lat, 'Bandara Yuvai Semaring\n(Long Bawan)', fontsize=8,
         transform=ccrs.PlateCarree(), color='red')
 
-# === Tampilkan ke Streamlit ===
+# === Tampilkan peta ke Streamlit ===
 st.pyplot(fig)
