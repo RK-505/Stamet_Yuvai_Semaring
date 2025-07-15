@@ -46,7 +46,7 @@ except Exception as e:
 
 # === Wilayah Kalimantan Utara ===
 lat_min, lat_max = 2.0, 5.0
-lon_min, lon_max = 114.0, 118.0
+lon_min, lon_max = 114.0, 118.2
 lat_slice = slice(lat_min, lat_max) if ds.lat[0] < ds.lat[-1] else slice(lat_max, lat_min)
 
 # === Parameter cuaca ===
@@ -88,9 +88,14 @@ valid_time = pd.to_datetime(str(ds.time[forecast_hour].values))
 valid_str = valid_time.strftime("%HUTC %a %d %b %Y")
 tstr = f"t+{forecast_hour:03d}"
 
-# === Koordinat Titik BMKG Yuvai Semaring Long Bawan ===
-bmkg_lat = 3.6888
-bmkg_lon = 115.7372
+# === Titik koordinat BMKG se-Kaltara ===
+stations = {
+    "BMKG Long Bawan": (3.6888, 115.7372),
+    "BMKG Nunukan": (4.1364, 117.6608),
+    "BMKG Malinau": (3.5917, 116.6203),
+    "BMKG Tarakan": (3.3264, 117.5673),
+    "BMKG Tanjung Selor": (2.8372, 117.3741),
+}
 
 # === Plot Peta ===
 fig = plt.figure(figsize=(10, 6))
@@ -120,17 +125,17 @@ else:
         ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# Fitur peta dasar
+# Tambahan fitur geospasial
 ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
 ax.add_feature(cfeature.RIVERS, linewidth=0.5)
 ax.add_feature(cfeature.LAKES, alpha=0.4)
 
-# Titik lokasi BMKG Yuvai Semaring
-ax.plot(bmkg_lon, bmkg_lat, marker='o', color='red', markersize=6, transform=ccrs.PlateCarree())
-ax.text(bmkg_lon + 0.03, bmkg_lat, 'BMKG Yuvai Semaring\n(Long Bawan)',
-        fontsize=8, transform=ccrs.PlateCarree(), color='red')
+# Plot semua stasiun BMKG
+for name, (lat, lon) in stations.items():
+    ax.plot(lon, lat, marker='o', color='red', markersize=6, transform=ccrs.PlateCarree())
+    ax.text(lon + 0.03, lat, name, fontsize=7, transform=ccrs.PlateCarree(), color='red')
 
 # Tampilkan di Streamlit
 st.pyplot(fig)
