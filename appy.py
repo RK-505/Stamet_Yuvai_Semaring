@@ -3,16 +3,17 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
-import geopandas as gpd
 import pandas as pd
 from datetime import datetime, timedelta
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import matplotlib.image as mpimg
 
-# === Konfigurasi Streamlit ===
-st.set_page_config(page_title="Prakiraan Cuaca Kabupaten Nunukan", layout="wide")
-st.title("📍 Prakiraan Cuaca Kabupaten Nunukan")
+# === Konfigurasi halaman ===
+st.set_page_config(page_title="Prakiraan Cuaca Krayan", layout="wide")
+st.title("📍 Prakiraan Cuaca Wilayah Krayan (GFS Realtime)")
 st.markdown("**Richard_14.24.0008_M8TB**")
 
-# === Fungsi bantu waktu GFS terbaru ===
+# === Fungsi bantu ===
 def get_latest_gfs_time():
     now = datetime.utcnow() - timedelta(hours=6)
     gfs_date = now.strftime('%Y%m%d')
@@ -24,10 +25,10 @@ def load_dataset(run_date, run_hour):
     url = f"https://nomads.ncep.noaa.gov/dods/gfs_0p25_1hr/gfs{run_date}/gfs_0p25_1hr_{run_hour}z"
     return xr.open_dataset(url)
 
-# === Sidebar kontrol ===
+# === Sidebar ===
 run_date, run_hour = get_latest_gfs_time()
 st.sidebar.title("⚙️ Pengaturan")
-st.sidebar.info(f"GFS: {run_date} jam {run_hour}Z")
+st.sidebar.info(f"📅 GFS otomatis: {run_date} jam {run_hour}Z")
 
 forecast_hour = st.sidebar.slider("Jam ke depan", 0, 240, 6, step=3)
 parameter = st.sidebar.selectbox("Parameter Cuaca", [
@@ -37,29 +38,17 @@ parameter = st.sidebar.selectbox("Parameter Cuaca", [
     "Tekanan Permukaan Laut (prmslmsl)"
 ])
 
-# === Load GFS dataset ===
+# === Load data ===
 try:
     ds = load_dataset(run_date, run_hour)
-    st.success("✅ Data GFS berhasil dimuat.")
+    st.success("✅ Dataset GFS berhasil dimuat.")
 except Exception as e:
     st.error(f"❌ Gagal memuat data: {e}")
     st.stop()
 
-# === Load shapefile batas kecamatan Nunukan ===
-try:
-    gdf = gpd.read_file("/mnt/data/nunukan_kecamatan.shp")
-    gdf = gdf.to_crs(epsg=4326)  # pastikan CRS WGS84
-except Exception as e:
-    st.error(f"❌ Gagal memuat shapefile batas kecamatan Nunukan: {e}")
-    st.stop()
-
-# === Tentukan wilayah visualisasi ===
-lon_min, lon_max = 114.2, 117.0
-lat_min, lat_max = 3.0, 5.0
-
-# === Pilih parameter ===
-is_vector = False
+# === Parameter cuaca ===
 is_contour = False
+is_vector = False
 
 if "pratesfc" in parameter:
     var = ds["pratesfc"][forecast_hour] * 3600
@@ -85,38 +74,63 @@ else:
     st.warning("Parameter tidak dikenali.")
     st.stop()
 
-# === Potong data sesuai wilayah Nunukan ===
+# === Wilayah Krayan ===
+lat_min, lat_max = 2.0, 4.5
+lon_min, lon_max = 114.5, 116.5
 lat_slice = slice(lat_min, lat_max) if var.lat[0] < var.lat[-1] else slice(lat_max, lat_min)
 var = var.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 if is_vector:
     u = u.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
     v = v.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 
-# === Waktu validasi ===
+# === Validasi waktu dan data ===
 valid_time = pd.to_datetime(str(ds.time[forecast_hour].values))
 valid_str = valid_time.strftime("%HUTC %a %d %b %Y")
 tstr = f"t+{forecast_hour:03d}"
 
-# === Titik Bandara ===
-bandara_lat, bandara_lon = 3.683, 115.733
+if var.size == 0 or var.isnull().all():
+    st.error("⚠️ Data tidak tersedia untuk wilayah Krayan.")
+    st.stop()
+
+# === Titik Bandara Yuvai Semaring ===
+bandara_lat = 3.683
+bandara_lon = 115.733
 
 # === Plot peta ===
-import matplotlib.pyplot as plt
-import cartopy.io.shapereader as shpreader
-
-fig = plt.figure(figsize=(10, 6))
+fig = plt.figure(figsize=(9, 6))
 ax = plt.axes(projection=ccrs.PlateCarree())
-ax.set_extent([lon_min, lon_max, lat_min, lat_max])
+ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
-# Judul
-ax.set_title(f"{label}", loc="center", fontsize=12, fontweight="bold")
-ax.text(0.01, 1.03, f"Valid: {valid_str}", transform=ax.transAxes, fontsize=9, ha='left')
-ax.text(0.99, 1.03, f"GFS {run_date} {run_hour}Z {tstr}", transform=ax.transAxes, fontsize=9, ha='right')
+# Judul & informasi waktu
+ax.text(0.5, 1.08, f"{label}", transform=ax.transAxes, ha="center",
+        fontsize=12, fontweight="bold")
+ax.text(0.01, 1.03, f"Valid: {valid_str}", transform=ax.transAxes,
+        fontsize=10, ha="left", va="top")
+ax.text(0.99, 1.03, f"GFS {run_date} {run_hour}Z {tstr}", transform=ax.transAxes,
+        fontsize=10, ha="right", va="top")
 
-# Tampilkan peta parameter
+# === Logo BMKG & STMKG di kiri atas ===
+try:
+    logo_bmkg = mpimg.imread("/mnt/data/e0c9c208-e5fc-4a10-9ce5-da9d709cd86c.png")
+    logo_stmkg = mpimg.imread("/mnt/data/sekolah-kedinasan-stmkg-yang-memiliki-ikatan-dinas-dengan-bmkg.jpg")
+
+    imagebox_bmkg = OffsetImage(logo_bmkg, zoom=0.12)
+    imagebox_stmkg = OffsetImage(logo_stmkg, zoom=0.10)
+
+    ab_bmkg = AnnotationBbox(imagebox_bmkg, (0.05, 1.06), xycoords='axes fraction',
+                             frameon=False, box_alignment=(0,1))
+    ab_stmkg = AnnotationBbox(imagebox_stmkg, (0.17, 1.06), xycoords='axes fraction',
+                              frameon=False, box_alignment=(0,1))
+
+    ax.add_artist(ab_bmkg)
+    ax.add_artist(ab_stmkg)
+except Exception as e:
+    st.warning(f"Gagal menambahkan logo: {e}")
+
+# === Plot parameter ===
 if is_contour:
-    cs = ax.contour(var.lon, var.lat, var.values, levels=15, colors='black',
-                    linewidths=0.8, transform=ccrs.PlateCarree())
+    cs = ax.contour(var.lon, var.lat, var.values, levels=15,
+                    colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
     ax.clabel(cs, fmt="%d", fontsize=8)
 else:
     im = var.plot.pcolormesh(ax=ax, transform=ccrs.PlateCarree(), cmap=cmap, add_colorbar=False)
@@ -127,18 +141,18 @@ else:
         ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# Tambahkan shapefile batas kecamatan
-gdf.boundary.plot(ax=ax, edgecolor='black', linewidth=1)
-
-# Fitur peta tambahan
-ax.coastlines(resolution='10m')
-ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
+# === Fitur Peta ===
+ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
+ax.add_feature(cfeature.BORDERS, linestyle=':', edgecolor='gray')
+ax.add_feature(cfeature.RIVERS, linewidth=0.5, edgecolor='blue')
+ax.add_feature(cfeature.LAKES, edgecolor='blue')
+ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
 
-# Titik bandara
+# === Titik Bandara ===
 ax.plot(bandara_lon, bandara_lat, marker='o', color='red', markersize=6, transform=ccrs.PlateCarree())
-ax.text(bandara_lon + 0.03, bandara_lat, 'Bandara Yuvai Semaring', fontsize=8,
+ax.text(bandara_lon + 0.03, bandara_lat, 'Bandara Yuvai Semaring\n(Long Bawan)', fontsize=8,
         transform=ccrs.PlateCarree(), color='red')
 
-# Tampilkan di Streamlit
+# === Tampilkan peta ke Streamlit ===
 st.pyplot(fig)
