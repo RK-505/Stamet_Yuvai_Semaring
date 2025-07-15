@@ -6,8 +6,8 @@ import cartopy.feature as cfeature
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Prakiraan Cuaca Wilayah Indonesia", layout="wide")
-st.title("📡 Global Forecast System Viewer (Realtime via NOMADS)")
+st.set_page_config(page_title="Prakiraan Cuaca Krayan", layout="wide")
+st.title("📍 Prakiraan Cuaca Wilayah Krayan (GFS Realtime)")
 st.header("Web Hasil Pembelajaran Pengelolaan Informasi Meteorologi")
 
 # ===== Fungsi bantu ambil run time GFS terbaru =====
@@ -82,18 +82,21 @@ else:
     st.warning("Parameter tidak dikenali.")
     st.stop()
 
-# Filter wilayah Indonesia
-var = var.sel(lat=slice(-15, 15), lon=slice(90, 150))
+# === Filter Wilayah Fokus Krayan ===
+# Lintang: 2.0° hingga 4.5° LU, Bujur: 114.5° - 116.5° BT
+lat_min, lat_max = 2.0, 4.5
+lon_min, lon_max = 114.5, 116.5
+
+var = var.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
 if is_vector:
-    u = u.sel(lat=slice(-15, 15), lon=slice(90, 150))
-    v = v.sel(lat=slice(-15, 15), lon=slice(90, 150))
+    u = u.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
+    v = v.sel(lat=slice(lat_max, lat_min), lon=slice(lon_min, lon_max))
 
-# Buat visualisasi peta
-fig = plt.figure(figsize=(10, 6))
+# Visualisasi Peta Wilayah Krayan
+fig = plt.figure(figsize=(8, 6))
 ax = plt.axes(projection=ccrs.PlateCarree())
-ax.set_extent([90, 150, -15, 15], crs=ccrs.PlateCarree())
+ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
 
-# Judul validasi waktu
 valid_time = ds.time[forecast_hour].values
 valid_dt = pd.to_datetime(str(valid_time))
 valid_str = valid_dt.strftime("%HUTC %a %d %b %Y")
@@ -102,7 +105,6 @@ tstr = f"t+{forecast_hour:03d}"
 ax.set_title(f"{label}\nValid {valid_str}", loc="left", fontsize=10, fontweight="bold")
 ax.set_title(f"GFS {run_date} {run_hour}Z {tstr}", loc="right", fontsize=10, fontweight="bold")
 
-# Gambar data
 if is_contour:
     cs = ax.contour(var.lon, var.lat, var.values, levels=15, colors='black', linewidths=0.8, transform=ccrs.PlateCarree())
     ax.clabel(cs, fmt="%d", colors='black', fontsize=8)
@@ -111,13 +113,12 @@ else:
     cbar = plt.colorbar(im, ax=ax, orientation='vertical', pad=0.02)
     cbar.set_label(label)
     if is_vector:
-        ax.quiver(var.lon[::5], var.lat[::5], u.values[::5, ::5], v.values[::5, ::5],
+        ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# Fitur geografis
+# Tambahan geospasial
 ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.BORDERS, linestyle=':')
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
 
-# Tampilkan plot
 st.pyplot(fig)
