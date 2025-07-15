@@ -44,7 +44,7 @@ except Exception as e:
     st.error(f"❌ Gagal memuat data: {e}")
     st.stop()
 
-# === Tentukan wilayah Kalimantan Utara ===
+# === Wilayah Kalimantan Utara ===
 lat_min, lat_max = 2.0, 5.0
 lon_min, lon_max = 114.0, 118.0
 lat_slice = slice(lat_min, lat_max) if ds.lat[0] < ds.lat[-1] else slice(lat_max, lat_min)
@@ -77,27 +77,27 @@ else:
     st.warning("Parameter tidak dikenali.")
     st.stop()
 
-# === Potong wilayah Kalimantan Utara ===
+# === Potong wilayah ===
 var = var.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 if is_vector:
     u = u.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
     v = v.sel(lat=lat_slice, lon=slice(lon_min, lon_max))
 
-# === Waktu validasi ===
+# === Validasi waktu ===
 valid_time = pd.to_datetime(str(ds.time[forecast_hour].values))
 valid_str = valid_time.strftime("%HUTC %a %d %b %Y")
 tstr = f"t+{forecast_hour:03d}"
 
-# === Titik Bandara Yuvai Semaring ===
-bandara_lat = 3.683
-bandara_lon = 115.733
+# === Koordinat Titik BMKG Yuvai Semaring Long Bawan ===
+bmkg_lat = 3.6888
+bmkg_lon = 115.7372
 
-# === Plot peta ===
+# === Plot Peta ===
 fig = plt.figure(figsize=(10, 6))
 ax = plt.axes(projection=ccrs.PlateCarree())
 ax.set_extent([lon_min, lon_max, lat_min, lat_max])
 
-# Judul dan waktu
+# Judul dan waktu validasi
 ax.text(0.5, 1.08, f"{label}", transform=ax.transAxes, ha="center",
         fontsize=12, fontweight="bold")
 ax.text(0.01, 1.03, f"Valid: {valid_str}", transform=ax.transAxes,
@@ -105,7 +105,7 @@ ax.text(0.01, 1.03, f"Valid: {valid_str}", transform=ax.transAxes,
 ax.text(0.99, 1.03, f"GFS {run_date} {run_hour}Z {tstr}", transform=ax.transAxes,
         fontsize=9, ha="right", va="top")
 
-# Tampilkan data parameter
+# Tampilkan data
 if is_contour:
     cs = ax.contour(var.lon, var.lat, var.values, levels=15, colors='black',
                     linewidths=0.8, transform=ccrs.PlateCarree())
@@ -120,14 +120,16 @@ else:
         ax.quiver(var.lon[::2], var.lat[::2], u.values[::2, ::2], v.values[::2, ::2],
                   transform=ccrs.PlateCarree(), scale=700, width=0.002, color='black')
 
-# Tambahan peta
+# Fitur peta dasar
 ax.coastlines(resolution='10m', linewidth=0.8)
 ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5)
 ax.add_feature(cfeature.LAND, facecolor='lightgray')
+ax.add_feature(cfeature.RIVERS, linewidth=0.5)
+ax.add_feature(cfeature.LAKES, alpha=0.4)
 
-# Titik bandara
-ax.plot(bandara_lon, bandara_lat, marker='o', color='red', markersize=6, transform=ccrs.PlateCarree())
-ax.text(bandara_lon + 0.03, bandara_lat, 'Bandara Yuvai Semaring\n(Long Bawan)',
+# Titik lokasi BMKG Yuvai Semaring
+ax.plot(bmkg_lon, bmkg_lat, marker='o', color='red', markersize=6, transform=ccrs.PlateCarree())
+ax.text(bmkg_lon + 0.03, bmkg_lat, 'BMKG Yuvai Semaring\n(Long Bawan)',
         fontsize=8, transform=ccrs.PlateCarree(), color='red')
 
 # Tampilkan di Streamlit
