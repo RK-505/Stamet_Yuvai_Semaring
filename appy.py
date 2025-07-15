@@ -1,4 +1,5 @@
-import streamlit as st
+# Simpan script lengkap sebagai file .py untuk pengguna
+script_content = '''import streamlit as st
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -9,7 +10,7 @@ from datetime import datetime, timedelta
 # === Konfigurasi Streamlit ===
 st.set_page_config(page_title="Prakiraan Cuaca Kalimantan Utara", layout="wide")
 st.title("📍 Prakiraan Cuaca Provinsi Kalimantan Utara")
-st.markdown("**Richard_14.24.0008_M8TB**")
+st.markdown("**Nama: Richard | NIM: 14.24.0008 | Kelas: M8TB**")
 
 # === Fungsi bantu ambil waktu GFS terbaru ===
 def get_latest_gfs_time():
@@ -139,3 +140,12 @@ for name, (lat, lon) in stations.items():
 
 # Tampilkan di Streamlit
 st.pyplot(fig)
+'''
+
+# Simpan ke file
+file_path = "/mnt/data/app_kaltara_bmkg_multi.py"
+with open(file_path, "w") as f:
+    f.write(script_content)
+
+file_path
+
